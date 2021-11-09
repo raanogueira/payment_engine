@@ -36,6 +36,7 @@ impl Exchange {
     }
 }
 
+//read one record at the time and only deserialize the current one. This avoids loading a huge dataset into memory and also to only deserilaise the current row that is being processed
 pub fn process_transactions_from_csv(
     path: &str,
     bank: &mut Exchange,

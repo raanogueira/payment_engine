@@ -19,6 +19,7 @@ pub struct ClientProfile {
     total: Currency,
     locked: bool,
     open_transactions: HashMap<TransactionId, Rc<Transaction>>,
+    //Instead of maintaing two maps, I could have used only one at the end and add "on_dispute" field to the Transaction struct, but I decided to keep it as it is to show a good usecase for std::rc::Rc 
     disputes: HashMap<TransactionId, Rc<Transaction>>,
 }
 
@@ -85,6 +86,7 @@ impl ClientProfile {
                         .entry(transaction.tx)
                         .or_insert_with(|| Rc::new(transaction));
                     let to_debit = amount_to_withdraw;
+
                     if self.available - to_debit >= Currency::zero() {
                         self.available -= to_debit;
                         self.total -= to_debit;
