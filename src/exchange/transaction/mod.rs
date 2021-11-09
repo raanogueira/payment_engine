@@ -41,10 +41,10 @@ pub enum Type {
 #[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct Transaction {
     #[serde(rename(deserialize = "type"))]
-    pub(super) tx_type: Type,
-    pub(super) client: ClientId,
-    pub(super) tx: TransactionId,
-    pub(super) amount: Option<Currency>,
+    pub(crate) tx_type: Type,
+    pub(crate) client: ClientId,
+    pub(crate) tx: TransactionId,
+    pub(crate) amount: Option<Currency>,
 }
 
 //assume that all transactions are in the same currency
