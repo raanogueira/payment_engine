@@ -3,9 +3,9 @@ use {std::collections::HashMap, std::error::Error};
 mod client_profile;
 mod transaction;
 
-use transaction::Transaction;
-use transaction::ClientId;
 use client_profile::ClientProfile;
+use transaction::ClientId;
+use transaction::Transaction;
 
 pub struct Exchange {
     clients: HashMap<ClientId, ClientProfile>,
@@ -18,25 +18,28 @@ impl Exchange {
         }
     }
 
-    /// If the client does not exist, create a new one. 
+    /// If the client does not exist, create a new one.
     /// ClientProfile::new() is only called when the client does not exist: or_insert_with with the default closure guarantee that a new ClientProfile is not created every time .entry() is called
     fn process_new_transaction(&mut self, transaction: Transaction) {
         let client = self
             .clients
             .entry(transaction.client)
-            .or_insert_with(|| ClientProfile::new(transaction.client));
+            .or_insert_with(|| ClientProfile::new_with_defaults(transaction.client));
         client.process_new_transaction(transaction);
     }
 
     pub fn to_csv(&self) {
         println!("client,available,held,total,locked");
         self.clients.iter().for_each(|(_, client)| {
-            println!("{}", client.to_csv());
+            println!("{}", client);
         });
     }
 }
 
-pub fn process_transactions_from_csv(path: &str, bank: &mut Exchange) -> Result<(), Box<dyn Error>> {
+pub fn process_transactions_from_csv(
+    path: &str,
+    bank: &mut Exchange,
+) -> Result<(), Box<dyn Error>> {
     let mut reader = csv::Reader::from_path(path)?;
 
     let headers = reader.headers()?.clone();
@@ -50,16 +53,15 @@ pub fn process_transactions_from_csv(path: &str, bank: &mut Exchange) -> Result<
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
 
     use super::*;
 
     use std::rc::Rc;
+    use transaction::Currency;
+    use transaction::Money;
     use transaction::Type;
-    use types::Currency;
-    use types::Money;
 
     #[test]
     fn it_should_handle_deposits_and_withdrawals_for_multiple_clients() {
@@ -94,27 +96,30 @@ mod tests {
         exchange.process_new_transaction(tx93.clone());
         exchange.process_new_transaction(tx94.clone());
 
-        let client1 = ClientProfile {
-            id: 1,
-            available: Currency::str("90.0"),
-            held: Currency::str("0.0"),
-            total: Currency::str("90.0"),
-            locked: false,
-            open_transactions: HashMap::from([(tx91.tx, Rc::new(tx91)), (tx94.tx, Rc::new(tx94))]),
-            disputes: HashMap::new(),
-        };
+        let client1 = ClientProfile::new(
+            1,
+            Currency::str("90.0"),
+            Currency::str("0.0"),
+            Currency::str("90.0"),
+            false,
+            HashMap::from([(tx91.tx, Rc::new(tx91)), (tx94.tx, Rc::new(tx94))]),
+            HashMap::new(),
+        );
 
-        let client2 = ClientProfile {
-            id: 2,
-            available: Currency::str("11.0"),
-            held: Currency::str("0.0"),
-            total: Currency::str("11.0"),
-            locked: false,
-            open_transactions: HashMap::from([(tx92.tx, Rc::new(tx92)), (tx93.tx, Rc::new(tx93))]),
-            disputes: HashMap::new(),
-        };
+        let client2 = ClientProfile::new(
+            2,
+            Currency::str("11.0"),
+            Currency::str("0.0"),
+            Currency::str("11.0"),
+            false,
+            HashMap::from([(tx92.tx, Rc::new(tx92)), (tx93.tx, Rc::new(tx93))]),
+            HashMap::new(),
+        );
 
-        assert_eq!(HashMap::from([(1, client1), (2, client2)]), exchange.clients);
+        assert_eq!(
+            HashMap::from([(1, client1), (2, client2)]),
+            exchange.clients
+        );
     }
 
     #[test]
@@ -139,17 +144,20 @@ mod tests {
         let rc_tx91 = Rc::new(tx91);
         let rc_tx91_clone = Rc::clone(&rc_tx91);
 
-        let client_with_open_dispute = ClientProfile {
-            id: 1,
-            available: Currency::str("00.0"),
-            held: Currency::str("123.0"),
-            total: Currency::str("123.0"),
-            locked: false,
-            open_transactions: HashMap::from([(rc_tx91.tx, rc_tx91)]),
-            disputes: HashMap::from([(rc_tx91_clone.tx, rc_tx91_clone)]),
-        };
+        let client_with_open_dispute = ClientProfile::new(
+            1,
+            Currency::str("00.0"),
+            Currency::str("123.0"),
+            Currency::str("123.0"),
+            false,
+            HashMap::from([(rc_tx91.tx, rc_tx91)]),
+            HashMap::from([(rc_tx91_clone.tx, rc_tx91_clone)]),
+        );
 
-        assert_eq!(HashMap::from([(1, client_with_open_dispute)]), exchange.clients);
+        assert_eq!(
+            HashMap::from([(1, client_with_open_dispute)]),
+            exchange.clients
+        );
 
         exchange.process_new_transaction(Transaction {
             tx_type: Type::Resolve,
@@ -158,15 +166,15 @@ mod tests {
             amount: None,
         });
 
-        let client_with_resolved_disputed = ClientProfile {
-            id: 1,
-            available: Currency::str("123.0"),
-            held: Currency::str("00.0"),
-            total: Currency::str("123.0"),
-            locked: false,
-            open_transactions: HashMap::new(),
-            disputes: HashMap::new(),
-        };
+        let client_with_resolved_disputed = ClientProfile::new(
+            1,
+            Currency::str("123.0"),
+            Currency::str("00.0"),
+            Currency::str("123.0"),
+            false,
+            HashMap::new(),
+            HashMap::new(),
+        );
 
         assert_eq!(
             HashMap::from([(1, client_with_resolved_disputed)]),
@@ -196,17 +204,20 @@ mod tests {
         let rc_tx91 = Rc::new(tx91);
         let rc_tx91_clone = Rc::clone(&rc_tx91);
 
-        let client_with_open_dispute = ClientProfile {
-            id: 1,
-            available: Currency::str("00.0"),
-            held: Currency::str("123.0"),
-            total: Currency::str("123.0"),
-            locked: false,
-            open_transactions: HashMap::from([(rc_tx91.tx, rc_tx91)]),
-            disputes: HashMap::from([(rc_tx91_clone.tx, rc_tx91_clone)]),
-        };
+        let client_with_open_dispute = ClientProfile::new(
+            1,
+            Currency::str("00.0"),
+            Currency::str("123.0"),
+            Currency::str("123.0"),
+            false,
+            HashMap::from([(rc_tx91.tx, rc_tx91)]),
+            HashMap::from([(rc_tx91_clone.tx, rc_tx91_clone)]),
+        );
 
-        assert_eq!(HashMap::from([(1, client_with_open_dispute)]), exchange.clients);
+        assert_eq!(
+            HashMap::from([(1, client_with_open_dispute)]),
+            exchange.clients
+        );
 
         exchange.process_new_transaction(Transaction {
             tx_type: Type::Chargeback,
@@ -215,15 +226,15 @@ mod tests {
             amount: None,
         });
 
-        let client_after_being_chargedback = ClientProfile {
-            id: 1,
-            available: Currency::str("00.0"),
-            held: Currency::str("00.0"),
-            total: Currency::str("00.0"),
-            locked: true,
-            open_transactions: HashMap::new(),
-            disputes: HashMap::new(),
-        };
+        let client_after_being_chargedback = ClientProfile::new(
+            1,
+            Currency::str("00.0"),
+            Currency::str("00.0"),
+            Currency::str("00.0"),
+            true,
+            HashMap::new(),
+            HashMap::new(),
+        );
 
         assert_eq!(
             HashMap::from([(1, client_after_being_chargedback)]),
@@ -252,17 +263,20 @@ mod tests {
 
         let rc_tx91 = Rc::new(tx91);
 
-        let client_with_no_disputes = ClientProfile {
-            id: 1,
-            available: Currency::str("123.0"),
-            held: Currency::str("00.0"),
-            total: Currency::str("123.0"),
-            locked: false,
-            open_transactions: HashMap::from([(rc_tx91.tx, rc_tx91)]),
-            disputes: HashMap::new(),
-        };
+        let client_with_no_disputes = ClientProfile::new(
+            1,
+            Currency::str("123.0"),
+            Currency::str("00.0"),
+            Currency::str("123.0"),
+            false,
+            HashMap::from([(rc_tx91.tx, rc_tx91)]),
+            HashMap::new(),
+        );
 
-        assert_eq!(HashMap::from([(1, client_with_no_disputes)]), exchange.clients);
+        assert_eq!(
+            HashMap::from([(1, client_with_no_disputes)]),
+            exchange.clients
+        );
     }
 
     #[test]
@@ -286,17 +300,20 @@ mod tests {
 
         let rc_deposit = Rc::new(deposit);
 
-        let client_with_no_disputes = ClientProfile {
-            id: 1,
-            available: Currency::str("123.0"),
-            held: Currency::str("00.0"),
-            total: Currency::str("123.0"),
-            locked: false,
-            open_transactions: HashMap::from([(rc_deposit.tx, rc_deposit)]),
-            disputes: HashMap::new(),
-        };
+        let client_with_no_disputes = ClientProfile::new(
+            1,
+            Currency::str("123.0"),
+            Currency::str("00.0"),
+            Currency::str("123.0"),
+            false,
+            HashMap::from([(rc_deposit.tx, rc_deposit)]),
+            HashMap::new(),
+        );
 
-        assert_eq!(HashMap::from([(1, client_with_no_disputes)]), exchange.clients);
+        assert_eq!(
+            HashMap::from([(1, client_with_no_disputes)]),
+            exchange.clients
+        );
     }
 
     #[test]
@@ -320,17 +337,19 @@ mod tests {
 
         let rc_deposit = Rc::new(deposit);
 
-        let client_with_no_disputes = ClientProfile {
-            id: 1,
-            available: Currency::str("123.0"),
-            held: Currency::str("00.0"),
-            total: Currency::str("123.0"),
-            locked: false,
-            open_transactions: HashMap::from([(rc_deposit.tx, rc_deposit)]),
-            disputes: HashMap::new(),
-        };
+        let client_with_no_disputes = ClientProfile::new(
+            1,
+            Currency::str("123.0"),
+            Currency::str("00.0"),
+            Currency::str("123.0"),
+            false,
+            HashMap::from([(rc_deposit.tx, rc_deposit)]),
+            HashMap::new(),
+        );
 
-        assert_eq!(HashMap::from([(1, client_with_no_disputes)]), exchange.clients);
+        assert_eq!(
+            HashMap::from([(1, client_with_no_disputes)]),
+            exchange.clients
+        );
     }
 }
-
