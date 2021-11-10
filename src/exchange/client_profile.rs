@@ -15,7 +15,7 @@ pub struct ClientProfile {
     held: Currency,
     total: Currency,
     locked: bool,
-    transactions: HashMap<TransactionId, Transaction>
+    transactions: HashMap<TransactionId, Transaction>,
 }
 
 pub struct ProcessingError(pub String);
@@ -28,7 +28,7 @@ impl ClientProfile {
             Currency::zero(),
             Currency::zero(),
             false,
-            HashMap::new()
+            HashMap::new(),
         )
     }
 
@@ -38,46 +38,42 @@ impl ClientProfile {
         held: Currency,
         total: Currency,
         locked: bool,
-        transactions: HashMap<TransactionId, Transaction>
+        transactions: HashMap<TransactionId, Transaction>,
     ) -> ClientProfile {
         ClientProfile {
             id,
-            available: available,
-            held: held,
-            total: total,
-            locked: locked,
-            transactions: transactions
+            available,
+            held,
+            total,
+            locked,
+            transactions,
         }
     }
 
     /// It was assumed that both Deposits and Withdrawals can be disputed
     /// Malformed Deposits and Withdrawals (without an amount defined) are ignored
     /// It was also assumed that transactions can be disputed multiple times
-    pub fn process_new_transaction(&mut self, transaction: Transaction) -> Result<(), ProcessingError> {
+    pub fn process_new_transaction(
+        &mut self,
+        transaction: Transaction,
+    ) -> Result<(), ProcessingError> {
         if self.locked {
-            return Err(ProcessingError(format!("Client's account {} is locked. {:?} not permitted.. Rejecting transaction {}", self.id, transaction.tx_type, transaction)));
+            return Err(ProcessingError(format!(
+                "Client's account {} is locked. {:?} not permitted.. Rejecting transaction {}",
+                self.id, transaction.tx_type, transaction
+            )));
         }
 
         match transaction.tx_type {
-            Type::Deposit => {
-                self.deposit(transaction)
-            }
+            Type::Deposit => self.deposit(transaction),
 
-            Type::Withdrawal => {
-                 self.withdrawal(transaction)
-            }
+            Type::Withdrawal => self.withdrawal(transaction),
 
-            Type::Dispute => {
-                self.dispute(transaction)
-            }
+            Type::Dispute => self.dispute(transaction),
 
-            Type::Resolve => {
-                self.resolve(transaction)
-            }
+            Type::Resolve => self.resolve(transaction),
 
-            Type::Chargeback => {
-                self.chargeback(transaction)
-            }
+            Type::Chargeback => self.chargeback(transaction),
         }
     }
 
@@ -88,9 +84,12 @@ impl ClientProfile {
                 .or_insert_with(|| transaction);
             self.available += amount_to_deposit;
             self.total += amount_to_deposit;
-            return Result::Ok(())
+            Result::Ok(())
         } else {
-            return Result::Err(ProcessingError(format!("Igoring malformed transaction {}..", transaction)));
+            Result::Err(ProcessingError(format!(
+                "Igoring malformed transaction {}..",
+                transaction
+            )))
         }
     }
 
@@ -98,21 +97,25 @@ impl ClientProfile {
         if let Some(amount_to_withdraw) = transaction.amount {
             let to_debit = amount_to_withdraw;
             if self.available - to_debit >= Currency::zero() {
-
                 self.transactions
-                .entry(transaction.tx)
-                .or_insert_with(|| transaction);
+                    .entry(transaction.tx)
+                    .or_insert_with(|| transaction);
 
                 self.available -= to_debit;
                 self.total -= to_debit;
-                return Result::Ok(());
+                Result::Ok(())
             } else {
-                return Result::Err(ProcessingError(format!("{} amount exceeds available funds {}. Igoring transaction ..",to_debit, self.available)));
+                Result::Err(ProcessingError(format!(
+                    "{} amount exceeds available funds {}. Igoring transaction ..",
+                    to_debit, self.available
+                )))
             }
         } else {
-            return Result::Err(ProcessingError(format!("Igoring Withdrawal transaction {} with missing the amount field..", transaction)));
+            Result::Err(ProcessingError(format!(
+                "Igoring Withdrawal transaction {} with missing the amount field..",
+                transaction
+            )))
         }
-
     }
 
     fn dispute(&mut self, transaction: Transaction) -> Result<(), ProcessingError> {
@@ -127,7 +130,7 @@ impl ClientProfile {
         Result::Ok(())
     }
 
-    fn resolve(&mut self, transaction: Transaction) -> Result<(), ProcessingError> { 
+    fn resolve(&mut self, transaction: Transaction) -> Result<(), ProcessingError> {
         if let Some(under_dispute) = self.transactions.get_mut(&transaction.tx) {
             if under_dispute.on_dispute {
                 if let Some(to_add) = under_dispute.amount {
@@ -144,7 +147,6 @@ impl ClientProfile {
     fn chargeback(&mut self, transaction: Transaction) -> Result<(), ProcessingError> {
         if let Some(under_dispute) = self.transactions.get_mut(&transaction.tx) {
             if under_dispute.on_dispute {
-
                 if let Some(chargeback) = under_dispute.amount {
                     self.held -= chargeback;
                     self.total -= chargeback;
