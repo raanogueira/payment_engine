@@ -63,38 +63,45 @@ mod tests {
 
     use super::*;
 
-    use std::rc::Rc;
     use transaction::Currency;
     use transaction::Money;
     use transaction::Type;
 
     #[test]
     fn it_should_handle_deposits_and_withdrawals_for_multiple_clients() {
+
         let mut exchange = Exchange::new();
-        let tx91 = Transaction {
-            tx_type: Type::Deposit,
-            client: 1,
-            tx: 91,
-            amount: Some(Currency::str("123.0")),
-        };
-        let tx92 = Transaction {
-            tx_type: Type::Deposit,
-            client: 2,
-            tx: 92,
-            amount: Some(Currency::str("55.0")),
-        };
-        let tx93 = Transaction {
-            tx_type: Type::Withdrawal,
-            client: 2,
-            tx: 93,
-            amount: Some(Currency::str("44.0")),
-        };
-        let tx94 = Transaction {
-            tx_type: Type::Withdrawal,
-            client: 1,
-            tx: 94,
-            amount: Some(Currency::str("33.0")),
-        };
+        let tx91 = Transaction::new(
+            Type::Deposit,
+            1,
+            91,
+            Some(Currency::str("123.0")),
+            false
+        );
+
+        let tx92 = Transaction::new(
+            Type::Deposit,
+            2,
+            92,
+            Some(Currency::str("55.0")),
+            false
+        );
+
+        let tx93 = Transaction::new(
+            Type::Withdrawal,
+            2,
+            93,
+            Some(Currency::str("44.0")),
+            false
+        );
+
+        let tx94 = Transaction::new(
+            Type::Withdrawal,
+            1,
+            94,
+            Some(Currency::str("33.0")),
+            false
+        );
 
         exchange.process_new_transaction(tx91.clone());
         exchange.process_new_transaction(tx92.clone());
@@ -107,8 +114,7 @@ mod tests {
             Currency::str("0.0"),
             Currency::str("90.0"),
             false,
-            HashMap::from([(tx91.tx, Rc::new(tx91)), (tx94.tx, Rc::new(tx94))]),
-            HashMap::new(),
+            HashMap::from([(tx91.tx, tx91), (tx94.tx, tx94)])
         );
 
         let client2 = ClientProfile::new(
@@ -117,8 +123,7 @@ mod tests {
             Currency::str("0.0"),
             Currency::str("11.0"),
             false,
-            HashMap::from([(tx92.tx, Rc::new(tx92)), (tx93.tx, Rc::new(tx93))]),
-            HashMap::new(),
+            HashMap::from([(tx92.tx, tx92), (tx93.tx, tx93)])
         );
 
         assert_eq!(
@@ -130,24 +135,30 @@ mod tests {
     #[test]
     fn it_should_resolve_disputes() {
         let mut exchange = Exchange::new();
-        let tx91 = Transaction {
-            tx_type: Type::Deposit,
-            client: 1,
-            tx: 91,
-            amount: Some(Currency::str("123.0")),
-        };
-        let tx92 = Transaction {
-            tx_type: Type::Dispute,
-            client: 1,
-            tx: 91,
-            amount: None,
-        };
+        let mut tx91 = Transaction::new(
+            Type::Deposit,
+            1,
+            91,
+            Some(Currency::str("123.0")),
+            false
+        );
+
+        let tx92 = Transaction::new(
+            Type::Dispute,
+            1,
+            91,
+            None,
+            false
+        );
+        
 
         exchange.process_new_transaction(tx91.clone());
         exchange.process_new_transaction(tx92.clone());
 
-        let rc_tx91 = Rc::new(tx91);
-        let rc_tx91_clone = Rc::clone(&rc_tx91);
+        tx91.start_dispute();
+
+        let mut tx91_dispute_resolved = tx91.clone();
+
 
         let client_with_open_dispute = ClientProfile::new(
             1,
@@ -155,8 +166,7 @@ mod tests {
             Currency::str("123.0"),
             Currency::str("123.0"),
             false,
-            HashMap::from([(rc_tx91.tx, rc_tx91)]),
-            HashMap::from([(rc_tx91_clone.tx, rc_tx91_clone)]),
+            HashMap::from([(tx91.tx, tx91)])
         );
 
         assert_eq!(
@@ -164,12 +174,17 @@ mod tests {
             exchange.clients
         );
 
-        exchange.process_new_transaction(Transaction {
-            tx_type: Type::Resolve,
-            client: 1,
-            tx: 91,
-            amount: None,
-        });
+        exchange.process_new_transaction(
+            Transaction::new(
+                Type::Resolve,
+                1,
+                91,
+                None,
+                false
+            )
+        );
+
+        tx91_dispute_resolved.stop_dispute();
 
         let client_with_resolved_disputed = ClientProfile::new(
             1,
@@ -177,8 +192,7 @@ mod tests {
             Currency::str("00.0"),
             Currency::str("123.0"),
             false,
-            HashMap::new(),
-            HashMap::new(),
+            HashMap::from([(tx91_dispute_resolved.tx, tx91_dispute_resolved)])
         );
 
         assert_eq!(
@@ -190,33 +204,36 @@ mod tests {
     #[test]
     fn it_should_chargeback_disputes() {
         let mut exchange = Exchange::new();
-        let tx91 = Transaction {
-            tx_type: Type::Deposit,
-            client: 1,
-            tx: 91,
-            amount: Some(Currency::str("123.0")),
-        };
-        let tx92 = Transaction {
-            tx_type: Type::Dispute,
-            client: 1,
-            tx: 91,
-            amount: None,
-        };
+        let mut tx91 = Transaction::new(
+            Type::Deposit,
+            1,
+            91,
+            Some(Currency::str("123.0")),
+            false
+        );
+
+        let tx92 = Transaction::new(
+            Type::Dispute,
+            1,
+            91,
+            None,
+            false
+        );
+
+        tx91.start_dispute();
 
         exchange.process_new_transaction(tx91.clone());
         exchange.process_new_transaction(tx92.clone());
 
-        let rc_tx91 = Rc::new(tx91);
-        let rc_tx91_clone = Rc::clone(&rc_tx91);
-
+        let mut tx91_not_on_dispute = tx91.clone();
+        
         let client_with_open_dispute = ClientProfile::new(
             1,
             Currency::str("00.0"),
             Currency::str("123.0"),
             Currency::str("123.0"),
             false,
-            HashMap::from([(rc_tx91.tx, rc_tx91)]),
-            HashMap::from([(rc_tx91_clone.tx, rc_tx91_clone)]),
+            HashMap::from([(tx91.tx, tx91)])
         );
 
         assert_eq!(
@@ -224,12 +241,17 @@ mod tests {
             exchange.clients
         );
 
-        exchange.process_new_transaction(Transaction {
-            tx_type: Type::Chargeback,
-            client: 1,
-            tx: 91,
-            amount: None,
-        });
+        exchange.process_new_transaction(
+                Transaction::new(
+                Type::Chargeback,
+                1,
+                91,
+                None,
+                false
+            )
+        ).unwrap_or_default();
+
+        tx91_not_on_dispute.stop_dispute();
 
         let client_after_being_chargedback = ClientProfile::new(
             1,
@@ -237,7 +259,7 @@ mod tests {
             Currency::str("00.0"),
             Currency::str("00.0"),
             true,
-            HashMap::new()
+            HashMap::from([(tx91_not_on_dispute.tx, tx91_not_on_dispute)])
         );
 
         assert_eq!(
@@ -249,23 +271,25 @@ mod tests {
     #[test]
     fn it_should_ignore_disputes_for_non_existing_transactions() {
         let mut exchange = Exchange::new();
-        let tx91 = Transaction {
-            tx_type: Type::Deposit,
-            client: 1,
-            tx: 91,
-            amount: Some(Currency::str("123.0")),
-        };
-        let tx92 = Transaction {
-            tx_type: Type::Dispute,
-            client: 1,
-            tx: 555,
-            amount: None,
-        };
+        let tx91 = Transaction::new(
+            Type::Deposit,
+            1,
+            91,
+            Some(Currency::str("123.0")),
+            false
+        );
+
+
+        let tx92 = Transaction::new(
+            Type::Dispute,
+            1,
+            555,
+            None,
+            false
+        );
 
         exchange.process_new_transaction(tx91.clone());
-        exchange.process_new_transaction(tx92.clone());
-
-        let rc_tx91 = Rc::new(tx91);
+        exchange.process_new_transaction(tx92);
 
         let client_with_no_disputes = ClientProfile::new(
             1,
@@ -273,8 +297,7 @@ mod tests {
             Currency::str("00.0"),
             Currency::str("123.0"),
             false,
-            HashMap::from([(rc_tx91.tx, rc_tx91)]),
-            HashMap::new(),
+            HashMap::from([(tx91.tx, tx91)])
         );
 
         assert_eq!(
@@ -286,23 +309,24 @@ mod tests {
     #[test]
     fn it_should_ignore_resolve_for_non_existing_disputes() {
         let mut exchange = Exchange::new();
-        let deposit = Transaction {
-            tx_type: Type::Deposit,
-            client: 1,
-            tx: 91,
-            amount: Some(Currency::str("123.0")),
-        };
-        let resolve = Transaction {
-            tx_type: Type::Resolve,
-            client: 1,
-            tx: 91,
-            amount: None,
-        };
+        let deposit = Transaction::new(
+            Type::Deposit,
+            1,
+            91,
+            Some(Currency::str("123.0")),
+            false
+        );
+
+        let resolve = Transaction::new(
+            Type::Resolve,
+            1,
+            91,
+            None,
+            false
+        );
 
         exchange.process_new_transaction(deposit.clone());
         exchange.process_new_transaction(resolve);
-
-        let rc_deposit = Rc::new(deposit);
 
         let client_with_no_disputes = ClientProfile::new(
             1,
@@ -310,8 +334,7 @@ mod tests {
             Currency::str("00.0"),
             Currency::str("123.0"),
             false,
-            HashMap::from([(rc_deposit.tx, rc_deposit)]),
-            HashMap::new(),
+            HashMap::from([(deposit.tx, deposit)])
         );
 
         assert_eq!(
@@ -323,23 +346,24 @@ mod tests {
     #[test]
     fn it_should_ignore_chargeback_for_non_existing_disputes() {
         let mut exchange = Exchange::new();
-        let deposit = Transaction {
-            tx_type: Type::Deposit,
-            client: 1,
-            tx: 91,
-            amount: Some(Currency::str("123.0")),
-        };
-        let resolve = Transaction {
-            tx_type: Type::Chargeback,
-            client: 1,
-            tx: 91,
-            amount: None,
-        };
+        let deposit = Transaction::new(
+            Type::Deposit,
+            1,
+            91,
+            Some(Currency::str("123.0")),
+            false
+        );
+
+        let resolve = Transaction::new(
+            Type::Chargeback,
+            1,
+            91,
+            None,
+            false
+        );
 
         exchange.process_new_transaction(deposit.clone());
         exchange.process_new_transaction(resolve);
-
-        let rc_deposit = Rc::new(deposit);
 
         let client_with_no_disputes = ClientProfile::new(
             1,
@@ -347,8 +371,7 @@ mod tests {
             Currency::str("00.0"),
             Currency::str("123.0"),
             false,
-            HashMap::from([(rc_deposit.tx, rc_deposit)]),
-            HashMap::new(),
+            HashMap::from([(deposit.tx, deposit)])
         );
 
         assert_eq!(

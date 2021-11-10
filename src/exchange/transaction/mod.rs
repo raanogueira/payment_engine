@@ -47,10 +47,20 @@ pub struct Transaction {
     pub(crate) tx: TransactionId,
     pub(crate) amount: Option<Currency>,
     #[serde(skip)]
-    on_dispute: bool
+    pub(crate) on_dispute: bool
 }
 
 impl Transaction {
+    pub fn new(tx_type: Type, client: ClientId, tx: TransactionId, amount: Option<Currency>, on_dispute: bool) -> Transaction {
+        Transaction {
+            tx_type: tx_type,
+            client: client,
+            tx: tx,
+            amount: amount,
+            on_dispute: on_dispute
+        }
+    }
+
     pub fn start_dispute(&mut self) {
         self.on_dispute = true;
     }

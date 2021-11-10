@@ -129,10 +129,12 @@ impl ClientProfile {
 
     fn resolve(&mut self, transaction: Transaction) -> Result<(), ProcessingError> { 
         if let Some(under_dispute) = self.transactions.get_mut(&transaction.tx) {
-            if let Some(to_add) = under_dispute.amount {
-                self.held -= to_add;
-                self.available += to_add;
-                under_dispute.stop_dispute();
+            if under_dispute.on_dispute {
+                if let Some(to_add) = under_dispute.amount {
+                    self.held -= to_add;
+                    self.available += to_add;
+                    under_dispute.stop_dispute();
+                }
             }
         }
 
@@ -141,11 +143,14 @@ impl ClientProfile {
 
     fn chargeback(&mut self, transaction: Transaction) -> Result<(), ProcessingError> {
         if let Some(under_dispute) = self.transactions.get_mut(&transaction.tx) {
-            if let Some(chargeback) = under_dispute.amount {
-                self.held -= chargeback;
-                self.total -= chargeback;
-                self.locked = true;
-                under_dispute.stop_dispute();
+            if under_dispute.on_dispute {
+
+                if let Some(chargeback) = under_dispute.amount {
+                    self.held -= chargeback;
+                    self.total -= chargeback;
+                    self.locked = true;
+                    under_dispute.stop_dispute();
+                }
             }
         }
 
