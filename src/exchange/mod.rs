@@ -1,9 +1,11 @@
-use {std::collections::HashMap, std::error::Error};
+use std::collections::HashMap;
+use std::error::Error;
 
 mod client_profile;
 mod transaction;
 
 use client_profile::ClientProfile;
+use client_profile::ProcessingError;
 use transaction::ClientId;
 use transaction::Transaction;
 
@@ -20,12 +22,12 @@ impl Exchange {
 
     /// If the client does not exist, create a new one.
     /// ClientProfile::new() is only called when the client does not exist: or_insert_with with the default closure guarantee that a new ClientProfile is not created every time .entry() is called
-    fn process_new_transaction(&mut self, transaction: Transaction) {
+    fn process_new_transaction(&mut self, transaction: Transaction) -> Result<(), ProcessingError> {
         let client = self
             .clients
             .entry(transaction.client)
             .or_insert_with(|| ClientProfile::new_with_defaults(transaction.client));
-        client.process_new_transaction(transaction);
+        client.process_new_transaction(transaction)
     }
 
     pub fn to_csv(&self) {
@@ -48,7 +50,9 @@ pub fn process_transactions_from_csv(
     let mut raw_record = csv::StringRecord::new();
     while reader.read_record(&mut raw_record)? {
         let t: Transaction = raw_record.deserialize(Some(&headers))?;
-        bank.process_new_transaction(t);
+        if let Err(ProcessingError(error)) = bank.process_new_transaction(t) {
+            eprintln!("{}", error);
+        }
     }
 
     Ok(())
@@ -233,8 +237,7 @@ mod tests {
             Currency::str("00.0"),
             Currency::str("00.0"),
             true,
-            HashMap::new(),
-            HashMap::new(),
+            HashMap::new()
         );
 
         assert_eq!(

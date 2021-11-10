@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::str::FromStr;
+use std::fmt;
 
 /// Using rust_decimal to handle fixed precision decimals with no round-off errors. rust decimal was wrapped around a small library so it can be changed easily if needed
 pub type Currency = rust_decimal::Decimal;
@@ -45,7 +46,31 @@ pub struct Transaction {
     pub(crate) client: ClientId,
     pub(crate) tx: TransactionId,
     pub(crate) amount: Option<Currency>,
+    #[serde(skip)]
+    on_dispute: bool
 }
+
+impl Transaction {
+    pub fn start_dispute(&mut self) {
+        self.on_dispute = true;
+    }
+
+    pub fn stop_dispute(&mut self) {
+        self.on_dispute = false;
+    }
+}
+
+impl fmt::Display for Transaction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:?},{},{},{:?},{}",
+            self.tx_type, self.client, self.tx, self.amount, self.on_dispute
+        )?;
+        Ok(())
+    }
+}
+
 
 //assume that all transactions are in the same currency
 pub trait Money {
