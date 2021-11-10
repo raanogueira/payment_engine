@@ -18,6 +18,7 @@ pub struct ClientProfile {
     transactions: HashMap<TransactionId, Transaction>,
 }
 
+#[derive(Debug)]
 pub struct ProcessingError(pub String);
 
 impl ClientProfile {
@@ -131,12 +132,12 @@ impl ClientProfile {
     }
 
     fn resolve(&mut self, transaction: Transaction) -> Result<(), ProcessingError> {
-        if let Some(under_dispute) = self.transactions.get_mut(&transaction.tx) {
-            if under_dispute.on_dispute {
-                if let Some(to_add) = under_dispute.amount {
+        if let Some(existing_transaction) = self.transactions.get_mut(&transaction.tx) {
+            if existing_transaction.under_dispute {
+                if let Some(to_add) = existing_transaction.amount {
                     self.held -= to_add;
                     self.available += to_add;
-                    under_dispute.stop_dispute();
+                    existing_transaction.stop_dispute();
                 }
             }
         }
@@ -145,13 +146,13 @@ impl ClientProfile {
     }
 
     fn chargeback(&mut self, transaction: Transaction) -> Result<(), ProcessingError> {
-        if let Some(under_dispute) = self.transactions.get_mut(&transaction.tx) {
-            if under_dispute.on_dispute {
-                if let Some(chargeback) = under_dispute.amount {
+        if let Some(existing_transaction) = self.transactions.get_mut(&transaction.tx) {
+            if existing_transaction.under_dispute {
+                if let Some(chargeback) = existing_transaction.amount {
                     self.held -= chargeback;
                     self.total -= chargeback;
                     self.locked = true;
-                    under_dispute.stop_dispute();
+                    existing_transaction.stop_dispute();
                 }
             }
         }
@@ -168,5 +169,372 @@ impl fmt::Display for ClientProfile {
             self.id, self.available, self.held, self.total, self.locked
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn it_should_add_funds_when_processing_deposits() {
+        let mut client_profile = ClientProfile::new_with_defaults(1);
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Deposit,
+                client: 1,
+                tx: 1000,
+                amount: Some(Currency::str("0.0001")),
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        assert_eq!(Currency::str("0.0001"), client_profile.available);
+        assert_eq!(Currency::str("0.0001"), client_profile.total);
+        assert_eq!(Currency::str("0.0000"), client_profile.held);
+        assert_eq!(false, client_profile.locked);
+        assert_eq!(1, client_profile.transactions.len());
+    }
+
+    #[test]
+    fn it_should_subtract_funds_when_processing_withdrawals() {
+        let mut client_profile = ClientProfile::new(
+            1,
+            Currency::str("0.0002"),
+            Currency::str("0.0"),
+            Currency::str("0.0002"),
+            false,
+            HashMap::new(),
+        );
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Withdrawal,
+                client: 1,
+                tx: 1000,
+                amount: Some(Currency::str("0.0002")),
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        assert_eq!(Currency::str("0.0000"), client_profile.available);
+        assert_eq!(Currency::str("0.0000"), client_profile.total);
+        assert_eq!(Currency::str("0.0000"), client_profile.held);
+        assert_eq!(false, client_profile.locked);
+        assert_eq!(1, client_profile.transactions.len());
+    }
+
+    #[test]
+    fn it_should_ignore_withdrawal_when_account_does_not_enough_funds() {
+        let mut client_profile = ClientProfile::new(
+            1,
+            Currency::str("0.0002"),
+            Currency::str("0.1000"),
+            Currency::str("0.1002"),
+            false,
+            HashMap::new(),
+        );
+
+        let result = client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Withdrawal,
+                client: 1,
+                tx: 1000,
+                amount: Some(Currency::str("0.0003")),
+                under_dispute: false,
+            })
+            .err();
+
+        assert_eq!(true, result.is_some());
+        assert_eq!(Currency::str("0.0002"), client_profile.available);
+        assert_eq!(Currency::str("0.1002"), client_profile.total);
+        assert_eq!(Currency::str("0.1000"), client_profile.held);
+        assert_eq!(false, client_profile.locked);
+        assert_eq!(0, client_profile.transactions.len());
+    }
+
+    #[test]
+    fn it_should_ignore_disputes_for_non_existing_transactions() {
+        let mut client_profile = ClientProfile::new(
+            1,
+            Currency::str("0.0002"),
+            Currency::str("0.0"),
+            Currency::str("0.0002"),
+            false,
+            HashMap::from([(
+                1000,
+                Transaction {
+                    tx_type: Type::Deposit,
+                    client: 1,
+                    tx: 1000,
+                    amount: Some(Currency::str("0.0002")),
+                    under_dispute: false,
+                },
+            )]),
+        );
+
+        //dispute referencing an non existing transaction
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Dispute,
+                client: 1,
+                tx: 1001,
+                amount: None,
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        assert_eq!(Currency::str("0.0002"), client_profile.available);
+        assert_eq!(Currency::str("0.0002"), client_profile.total);
+        assert_eq!(Currency::str("0.0000"), client_profile.held);
+        assert_eq!(false, client_profile.locked);
+        assert_eq!(1, client_profile.transactions.len());
+        assert_eq!(
+            false,
+            client_profile
+                .transactions
+                .get(&1000)
+                .unwrap()
+                .under_dispute
+        );
+    }
+
+    #[test]
+    fn it_should_dispute_existing_transactions() {
+        let mut client_profile = ClientProfile::new(
+            1,
+            Currency::str("0.0002"),
+            Currency::str("0.00"),
+            Currency::str("0.0002"),
+            false,
+            HashMap::from([(
+                1000,
+                Transaction {
+                    tx_type: Type::Deposit,
+                    client: 1,
+                    tx: 1000,
+                    amount: Some(Currency::str("0.0002")),
+                    under_dispute: false,
+                },
+            )]),
+        );
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Dispute,
+                client: 1,
+                tx: 1000,
+                amount: None,
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        assert_eq!(Currency::str("0.0000"), client_profile.available);
+        assert_eq!(Currency::str("0.0002"), client_profile.total);
+        assert_eq!(Currency::str("0.0002"), client_profile.held);
+        assert_eq!(false, client_profile.locked);
+        assert_eq!(1, client_profile.transactions.len());
+        assert_eq!(
+            true,
+            client_profile
+                .transactions
+                .get(&1000)
+                .unwrap()
+                .under_dispute
+        );
+    }
+
+    #[test]
+    fn it_should_resolve_existing_dispute() {
+        let mut client_profile = ClientProfile::new(
+            1,
+            Currency::str("0.0000"),
+            Currency::str("0.0002"),
+            Currency::str("0.0002"),
+            false,
+            HashMap::from([(
+                1000,
+                Transaction {
+                    tx_type: Type::Deposit,
+                    client: 1,
+                    tx: 1000,
+                    amount: Some(Currency::str("0.0002")),
+                    under_dispute: true,
+                },
+            )]),
+        );
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Resolve,
+                client: 1,
+                tx: 1000,
+                amount: None,
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        assert_eq!(Currency::str("0.0002"), client_profile.available);
+        assert_eq!(Currency::str("0.0002"), client_profile.total);
+        assert_eq!(Currency::str("0.0000"), client_profile.held);
+        assert_eq!(false, client_profile.locked);
+        assert_eq!(1, client_profile.transactions.len());
+        assert_eq!(
+            false,
+            client_profile
+                .transactions
+                .get(&1000)
+                .unwrap()
+                .under_dispute
+        );
+    }
+
+    #[test]
+    fn it_should_chargeback_existing_dispute() {
+        let mut client_profile = ClientProfile::new(
+            1,
+            Currency::str("0.0000"),
+            Currency::str("0.0002"),
+            Currency::str("0.0002"),
+            false,
+            HashMap::from([(
+                1000,
+                Transaction {
+                    tx_type: Type::Deposit,
+                    client: 1,
+                    tx: 1000,
+                    amount: Some(Currency::str("0.0002")),
+                    under_dispute: true,
+                },
+            )]),
+        );
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Chargeback,
+                client: 1,
+                tx: 1000,
+                amount: None,
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        assert_eq!(Currency::str("0.0000"), client_profile.available);
+        assert_eq!(Currency::str("0.0000"), client_profile.total);
+        assert_eq!(Currency::str("0.0000"), client_profile.held);
+        assert_eq!(true, client_profile.locked);
+        assert_eq!(1, client_profile.transactions.len());
+        assert_eq!(
+            false,
+            client_profile
+                .transactions
+                .get(&1000)
+                .unwrap()
+                .under_dispute
+        );
+    }
+
+    #[test]
+    fn it_should_be_able_to_dispute_multiple_transactions() {
+        let mut client_profile = ClientProfile::new(
+            1,
+            Currency::str("1.0011"),
+            Currency::str("0.00"),
+            Currency::str("1.0011"),
+            false,
+            HashMap::from([
+                (
+                    333,
+                    Transaction {
+                        tx_type: Type::Deposit,
+                        client: 1,
+                        tx: 333,
+                        amount: Some(Currency::str("0.0002")),
+                        under_dispute: false,
+                    },
+                ),
+                (
+                    2222,
+                    Transaction {
+                        tx_type: Type::Deposit,
+                        client: 1,
+                        tx: 2222,
+                        amount: Some(Currency::str("1.0009")),
+                        under_dispute: false,
+                    },
+                ),
+            ]),
+        );
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Dispute,
+                client: 1,
+                tx: 333,
+                amount: None,
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Dispute,
+                client: 1,
+                tx: 2222,
+                amount: None,
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        assert_eq!(Currency::str("0.0000"), client_profile.available);
+        assert_eq!(Currency::str("1.0011"), client_profile.total);
+        assert_eq!(Currency::str("1.0011"), client_profile.held);
+        assert_eq!(false, client_profile.locked);
+        assert_eq!(2, client_profile.transactions.len());
+        assert_eq!(
+            true,
+            client_profile.transactions.get(&333).unwrap().under_dispute
+        );
+        assert_eq!(
+            true,
+            client_profile
+                .transactions
+                .get(&2222)
+                .unwrap()
+                .under_dispute
+        );
+    }
+
+    #[test]
+    fn it_should_ignore_transactions_without_an_amount() {
+        let mut client_profile = ClientProfile::new_with_defaults(1);
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Deposit,
+                client: 1,
+                tx: 1000,
+                amount: None,
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        client_profile
+            .process_new_transaction(Transaction {
+                tx_type: Type::Withdrawal,
+                client: 1,
+                tx: 1001,
+                amount: None,
+                under_dispute: false,
+            })
+            .unwrap_or_default();
+
+        assert_eq!(Currency::str("0.0000"), client_profile.available);
+        assert_eq!(Currency::str("0.0000"), client_profile.total);
+        assert_eq!(Currency::str("0.0000"), client_profile.held);
+        assert_eq!(false, client_profile.locked);
+        assert_eq!(0, client_profile.transactions.len());
     }
 }

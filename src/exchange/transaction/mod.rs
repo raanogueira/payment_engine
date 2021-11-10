@@ -47,16 +47,16 @@ pub struct Transaction {
     pub(crate) tx: TransactionId,
     pub(crate) amount: Option<Currency>,
     #[serde(skip)]
-    pub(crate) on_dispute: bool,
+    pub(crate) under_dispute: bool,
 }
 
 impl Transaction {
     pub fn start_dispute(&mut self) {
-        self.on_dispute = true;
+        self.under_dispute = true;
     }
 
     pub fn stop_dispute(&mut self) {
-        self.on_dispute = false;
+        self.under_dispute = false;
     }
 }
 
@@ -65,7 +65,7 @@ impl fmt::Display for Transaction {
         write!(
             f,
             "{:?},{},{},{:?},{}",
-            self.tx_type, self.client, self.tx, self.amount, self.on_dispute
+            self.tx_type, self.client, self.tx, self.amount, self.under_dispute
         )?;
         Ok(())
     }

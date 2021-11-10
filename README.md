@@ -103,3 +103,7 @@ Assuming this had to be done using a single binary in a single computer.
 
 The lack of timestamps in the file makes it hard to split the work of reading the CSV because it is assumed that all transactions are ordered in the file. 
 If transactions had a timestamp, it would possible to split the work to read the whole CSV into multiple smaller tasks (performed by different threads in a single binary) and speed up the whole task dramatically. The bottleneck is the task of reading and parsing the CSV entries.
+
+## Datamodel
+
+There is scope to improve the datamodel, but that would require custom a deseriliaser which can de done in v1.0.1 of this project. A better datamodel would reduce some duplication and also make the code more robuts e.g deposits and withdrawals without an amount defined would be filtered out when reading the CSV file.
