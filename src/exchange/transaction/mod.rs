@@ -51,22 +51,6 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(
-        tx_type: Type,
-        client: ClientId,
-        tx: TransactionId,
-        amount: Option<Currency>,
-        on_dispute: bool,
-    ) -> Transaction {
-        Transaction {
-            tx_type,
-            client,
-            tx,
-            amount,
-            on_dispute,
-        }
-    }
-
     pub fn start_dispute(&mut self) {
         self.on_dispute = true;
     }

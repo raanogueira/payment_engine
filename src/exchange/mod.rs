@@ -70,13 +70,38 @@ mod tests {
     #[test]
     fn it_should_handle_deposits_and_withdrawals_for_multiple_clients() {
         let mut exchange = Exchange::new();
-        let tx91 = Transaction::new(Type::Deposit, 1, 91, Some(Currency::str("123.0")), false);
 
-        let tx92 = Transaction::new(Type::Deposit, 2, 92, Some(Currency::str("55.0")), false);
+        let tx91 = Transaction {
+            tx_type: Type::Deposit,
+            client: 1,
+            tx: 91,
+            amount: Some(Currency::str("123.0")),
+            on_dispute: false,
+        };
 
-        let tx93 = Transaction::new(Type::Withdrawal, 2, 93, Some(Currency::str("44.0")), false);
+        let tx92 = Transaction {
+            tx_type: Type::Deposit,
+            client: 2,
+            tx: 92,
+            amount: Some(Currency::str("55.0")),
+            on_dispute: false,
+        };
 
-        let tx94 = Transaction::new(Type::Withdrawal, 1, 94, Some(Currency::str("33.0")), false);
+        let tx93 = Transaction {
+            tx_type: Type::Withdrawal,
+            client: 2,
+            tx: 93,
+            amount: Some(Currency::str("44.0")),
+            on_dispute: false,
+        };
+
+        let tx94 = Transaction {
+            tx_type: Type::Withdrawal,
+            client: 1,
+            tx: 94,
+            amount: Some(Currency::str("33.0")),
+            on_dispute: false,
+        };
 
         exchange
             .process_new_transaction(tx91.clone())
@@ -118,9 +143,22 @@ mod tests {
     #[test]
     fn it_should_resolve_disputes() {
         let mut exchange = Exchange::new();
-        let mut tx91 = Transaction::new(Type::Deposit, 1, 91, Some(Currency::str("123.0")), false);
 
-        let tx92 = Transaction::new(Type::Dispute, 1, 91, None, false);
+        let mut tx91 = Transaction {
+            tx_type: Type::Deposit,
+            client: 1,
+            tx: 91,
+            amount: Some(Currency::str("123.0")),
+            on_dispute: false,
+        };
+
+        let tx92 = Transaction {
+            tx_type: Type::Dispute,
+            client: 1,
+            tx: 91,
+            amount: None,
+            on_dispute: false,
+        };
 
         exchange
             .process_new_transaction(tx91.clone())
@@ -148,7 +186,13 @@ mod tests {
         );
 
         exchange
-            .process_new_transaction(Transaction::new(Type::Resolve, 1, 91, None, false))
+            .process_new_transaction(Transaction {
+                tx_type: Type::Resolve,
+                client: 1,
+                tx: 91,
+                amount: None,
+                on_dispute: false,
+            })
             .unwrap_or_default();
 
         tx91_dispute_resolved.stop_dispute();
@@ -171,9 +215,21 @@ mod tests {
     #[test]
     fn it_should_chargeback_disputes() {
         let mut exchange = Exchange::new();
-        let mut tx91 = Transaction::new(Type::Deposit, 1, 91, Some(Currency::str("123.0")), false);
+        let mut tx91 = Transaction {
+            tx_type: Type::Deposit,
+            client: 1,
+            tx: 91,
+            amount: Some(Currency::str("123.0")),
+            on_dispute: false,
+        };
 
-        let tx92 = Transaction::new(Type::Dispute, 1, 91, None, false);
+        let tx92 = Transaction {
+            tx_type: Type::Dispute,
+            client: 1,
+            tx: 91,
+            amount: None,
+            on_dispute: false,
+        };
 
         tx91.start_dispute();
 
@@ -201,7 +257,13 @@ mod tests {
         );
 
         exchange
-            .process_new_transaction(Transaction::new(Type::Chargeback, 1, 91, None, false))
+            .process_new_transaction(Transaction {
+                tx_type: Type::Chargeback,
+                client: 1,
+                tx: 91,
+                amount: None,
+                on_dispute: false,
+            })
             .unwrap_or_default();
 
         tx91_not_on_dispute.stop_dispute();
@@ -224,9 +286,21 @@ mod tests {
     #[test]
     fn it_should_ignore_disputes_for_non_existing_transactions() {
         let mut exchange = Exchange::new();
-        let tx91 = Transaction::new(Type::Deposit, 1, 91, Some(Currency::str("123.0")), false);
+        let tx91 = Transaction {
+            tx_type: Type::Deposit,
+            client: 1,
+            tx: 91,
+            amount: Some(Currency::str("123.0")),
+            on_dispute: false,
+        };
 
-        let tx92 = Transaction::new(Type::Dispute, 1, 555, None, false);
+        let tx92 = Transaction {
+            tx_type: Type::Dispute,
+            client: 1,
+            tx: 555,
+            amount: None,
+            on_dispute: false,
+        };
 
         exchange
             .process_new_transaction(tx91.clone())
@@ -251,9 +325,21 @@ mod tests {
     #[test]
     fn it_should_ignore_resolve_for_non_existing_disputes() {
         let mut exchange = Exchange::new();
-        let deposit = Transaction::new(Type::Deposit, 1, 91, Some(Currency::str("123.0")), false);
+        let deposit = Transaction {
+            tx_type: Type::Deposit,
+            client: 1,
+            tx: 91,
+            amount: Some(Currency::str("123.0")),
+            on_dispute: false,
+        };
 
-        let resolve = Transaction::new(Type::Resolve, 1, 91, None, false);
+        let resolve = Transaction {
+            tx_type: Type::Resolve,
+            client: 1,
+            tx: 91,
+            amount: None,
+            on_dispute: false,
+        };
 
         exchange
             .process_new_transaction(deposit.clone())
@@ -280,9 +366,21 @@ mod tests {
     #[test]
     fn it_should_ignore_chargeback_for_non_existing_disputes() {
         let mut exchange = Exchange::new();
-        let deposit = Transaction::new(Type::Deposit, 1, 91, Some(Currency::str("123.0")), false);
+        let deposit = Transaction {
+            tx_type: Type::Deposit,
+            client: 1,
+            tx: 91,
+            amount: Some(Currency::str("123.0")),
+            on_dispute: false,
+        };
 
-        let resolve = Transaction::new(Type::Chargeback, 1, 91, None, false);
+        let resolve = Transaction {
+            tx_type: Type::Chargeback,
+            client: 1,
+            tx: 91,
+            amount: None,
+            on_dispute: false,
+        };
 
         exchange
             .process_new_transaction(deposit.clone())
