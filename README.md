@@ -43,67 +43,60 @@ client,available,held,total,locked
 
 * Resolve and Chargeback transactions are only considered if there is an open dispute for the respective deposit or withdrawal 
 
+* The same transaction can be disputed many times.
+
 # Testing
 
-The main requirements were verified with high level unit tests as the one described below:
+The main requirements were verified with high-level unit tests as the one described below:
 
 ```
-fn it_should_ignore_chargeback_for_non_existing_disputes() {
-        let mut exchange = Exchange::new();
-        let deposit = Transaction {
+#[test]
+fn it_should_add_funds_when_processing_deposits() {
+    let mut client_profile = ClientProfile::new_with_defaults(1);
+
+    client_profile
+        .process_new_transaction(Transaction {
             tx_type: Type::Deposit,
             client: 1,
-            tx: 91,
-            amount: Some(Currency::str("123.0")),
-        };
-        let resolve = Transaction {
-            tx_type: Type::Chargeback,
-            client: 1,
-            tx: 91,
-            amount: None,
-        };
+            tx: 1000,
+            amount: Some(Currency::str("0.0001")),
+            under_dispute: false,
+        })
+        .unwrap_or_default();
 
-        exchange.process_new_transaction(deposit.clone());
-        exchange.process_new_transaction(resolve);
-
-        let rc_deposit = Rc::new(deposit);
-
-        let client_with_no_disputes = ClientProfile::new(
-            1,
-            Currency::str("123.0"),
-            Currency::str("00.0"),
-            Currency::str("123.0"),
-            false,
-            HashMap::from([(rc_deposit.tx, rc_deposit)]),
-            HashMap::new(),
-        );
-
-        assert_eq!(
-            HashMap::from([(1, client_with_no_disputes)]),
-            exchange.clients
-        );
-    }
+    assert_eq!(Currency::str("0.0001"), client_profile.available);
+    assert_eq!(Currency::str("0.0001"), client_profile.total);
+    assert_eq!(Currency::str("0.0000"), client_profile.held);
+    assert_eq!(false, client_profile.locked);
+    assert_eq!(1, client_profile.transactions.len());
+}
 ```
 
-Manual testing using different datasets (some of the available in this repo) was also performed
+The unit tests for the ClientProfilee and Exchange allowed validating the main requirements of this project.
+
+Manual testing using different datasets (some of them available in this repo) was also performed. This manual task was very important to validate the deserialisation and serialisation logic.
+
 
 # Improvements
 
-## Real world improvements/Sharding
+## Real-world improvements/Sharding
 
-In a real case scenario, the transaction processor could have been split into different components/threads/services (depending on the size of the problem) where one service would read the data from a file or receive the requests via a WebSocket/REST API and publish (using Rust's std::sync::mpsc, Tokio, Kafka or RabbitMQ) the transactions to separate workers. 
+In a real case scenario, the transaction processor could have been split into different components/threads/services (depending on the size of the problem) where one service would read the data from a file or receive the data/requests via a WebSocket or REST API. The service would then publish (using Rust's std::sync::mpsc, Tokio, Kafka or RabbitMQ) the transactions to separate workers. 
 
 On a larger scale, these workers (threads or services) would be handling a smaller subset of transactions i.e. the transactions could be sharded by client id or the client's location. 
 
-This solution, of course, brings many other challenges like the atomicity of the transactions in a distributed environment with many services. It would be required some sort of orchestration or a pattern like SAGA (2pc in a monolith) to guarantee consistency of long-lived transactions.
+This solution, of course, brings many other challenges such as the atomicity of the transactions in a distributed environment with many services. It would be required some sort of orchestration or a pattern like SAGA (2pc in a monolith) to guarantee consistency of long-lived transactions.
 
 ## A single binary with multi-threading 
 
 Assuming this had to be done using a single binary in a single computer.
 
-The lack of timestamps in the file makes it hard to split the work of reading the CSV because it is assumed that all transactions are ordered in the file. 
-If transactions had a timestamp, it would possible to split the work to read the whole CSV into multiple smaller tasks (performed by different threads in a single binary) and speed up the whole task dramatically. The bottleneck is the task of reading and parsing the CSV entries.
+The lack of timestamps in the file makes it hard to split the work of reading the CSV. The current solution assumes that all transactions are chronologically ordered in the file. 
+
+If the transactions had a timestamp, it would possible to split the work to read the whole CSV into multiple smaller tasks (performed by different threads in a single binary) and speed up the whole task dramatically. This would have a big impact as the bottleneck is reading and parsing the CSV entries, 
 
 ## Datamodel
 
-There is scope to improve the datamodel, but that would require custom a deseriliaser which can de done in v1.0.1 of this project. A better datamodel would reduce some duplication and also make the code more robuts e.g deposits and withdrawals without an amount defined would be filtered out when reading the CSV file.
+There is scope to improve the datamodel, but that would require a custom deserialiser which can be done in v1.0.1 of this project. 
+
+A better datamodel would reduce some duplication and also make the code more robust and readable e.g deposits and withdrawals without an amount defined would be filtered out when reading and parsing the CSV entries.
