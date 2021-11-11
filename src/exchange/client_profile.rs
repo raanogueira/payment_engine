@@ -107,8 +107,8 @@ impl ClientProfile {
                 Result::Ok(())
             } else {
                 Result::Err(ProcessingError(format!(
-                    "{} amount exceeds available funds {}. Igoring transaction ..",
-                    to_debit, self.available
+                    "{} amount exceeds available funds {}. Igoring transaction {}..",
+                    to_debit, self.available, transaction
                 )))
             }
         } else {
