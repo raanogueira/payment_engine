@@ -13,6 +13,7 @@ pub struct Exchange {
     clients: HashMap<ClientId, ClientProfile>,
 }
 
+
 impl Exchange {
     pub fn new() -> Exchange {
         Exchange {

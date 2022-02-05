@@ -11,3 +11,6 @@ edition = "2021"
 csv = "1.1.6"
 serde = { version = "1.0.130", features = ["derive"] }
 rust_decimal = "1.17.0"
+
+futures = { version = "0.3.*" }
+tokio = {version = "0.2.*", features = ["full"] }

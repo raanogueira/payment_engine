@@ -51,9 +51,6 @@ impl ClientProfile {
         }
     }
 
-    /// It was assumed that both Deposits and Withdrawals can be disputed
-    /// Malformed Deposits and Withdrawals (without an amount defined) are ignored
-    /// It was also assumed that transactions can be disputed multiple times
     pub fn process_new_transaction(
         &mut self,
         transaction: Transaction,
